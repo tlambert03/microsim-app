@@ -29,16 +29,19 @@ A web application for interactive microscopy simulation using the [microsim](htt
 ### Backend Setup
 
 1. Navigate to the backend directory:
+
    ```bash
    cd backend
    ```
 
 2. Install dependencies using uv:
+
    ```bash
    uv sync
    ```
 
 3. Start the FastAPI development server:
+
    ```bash
    uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
@@ -48,16 +51,19 @@ A web application for interactive microscopy simulation using the [microsim](htt
 ### Frontend Setup
 
 1. Navigate to the frontend directory:
+
    ```bash
    cd frontend
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Start the development server:
+
    ```bash
    npm run dev
    ```
@@ -69,12 +75,14 @@ A web application for interactive microscopy simulation using the [microsim](htt
 For development, you'll need to run both the backend and frontend simultaneously in separate terminals:
 
 Terminal 1 (Backend):
+
 ```bash
 cd backend
 uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Terminal 2 (Frontend):
+
 ```bash
 cd frontend
 npm run dev
@@ -83,12 +91,15 @@ npm run dev
 ## API Endpoints
 
 ### `GET /schema/simulation`
+
 Returns the JSON schema for the Simulation model to enable dynamic form building.
 
 ### `POST /simulate`
+
 Accepts a simulation configuration and returns simulated image data:
 
 **Request Body:**
+
 ```json
 {
   "simulation": {
@@ -103,6 +114,7 @@ Accepts a simulation configuration and returns simulated image data:
 ```
 
 **Response:**
+
 ```json
 {
   "shape": [1, 32, 128, 128],
@@ -115,6 +127,7 @@ Accepts a simulation configuration and returns simulated image data:
 ```
 
 ### `GET /health`
+
 Health check endpoint.
 
 ## Usage
@@ -161,15 +174,18 @@ Health check endpoint.
 ## Troubleshooting
 
 **Backend Issues:**
+
 - Ensure microsim is properly installed: `uv run python -c "import microsim; print('OK')"`
 - Check that the server is running on port 8000: `curl http://localhost:8000/health`
 
 **Frontend Issues:**
+
 - Verify Node.js version: `node --version` (should be 18+)
 - Clear npm cache if installation fails: `npm cache clean --force`
 - Check that the frontend can reach the backend: open browser dev tools and check for CORS errors
 
 **Simulation Errors:**
+
 - Start with small image dimensions (32x32 or 64x64) for faster iteration
 - Check the browser console for detailed error messages
 - Verify simulation parameters are within valid ranges
