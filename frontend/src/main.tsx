@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import axios from 'axios';
+import { SimulationVivViewer } from './VivIntegration';
 
 const API = 'http://localhost:8000';
 
@@ -126,19 +127,29 @@ function App() {
   const [sim, setSim] = useState<SimulationState>(defaultState);
   const [result, setResult] = useState<SimResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [zIndex, setZIndex] = useState(0);
   const [channelSettings, setChannelSettings] = useState<ChannelSettings[]>([
     { enabled: true, lut: 0, contrast: [0, 100], visible: true },
     { enabled: true, lut: 1, contrast: [0, 100], visible: true },
     { enabled: true, lut: 2, contrast: [0, 100], visible: true },
     { enabled: true, lut: 3, contrast: [0, 100], visible: true },
   ]);
-  const [imageScale, setImageScale] = useState(8); // For upscaling small images
   const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
     axios.get(`${API}/schema/simulation`).then(r => setSchema(r.data));
+    // Load test data for Viv viewer
+    loadTestData();
   }, []);
+
+  const loadTestData = async () => {
+    try {
+      const response = await axios.get(`${API}/test-data`);
+      setResult(response.data);
+      console.log('Loaded test data for Viv:', response.data);
+    } catch (error) {
+      console.error('Failed to load test data:', error);
+    }
+  };
 
   const update = (path: string, value: any) => {
     setSim(prev => {
@@ -174,7 +185,6 @@ function App() {
       const payload = { ...sim, output_space: { downscale: 4 } };
       const r = await axios.post(`${API}/simulate`, { simulation: payload });
       setResult(r.data as SimResult);
-      setZIndex(0);
       // Reset channel settings for new result
       const numChannels = r.data.shape[0];
       setChannelSettings(Array.from({ length: numChannels }, (_, i) => ({
@@ -190,88 +200,6 @@ function App() {
       setLoading(false);
     }
   };
-
-  // Enhanced image composition with contrast controls
-  const compositeUrl = useMemo(() => {
-    if (!result) return null;
-    const [C, Z, Y, X] = result.shape;
-    if (zIndex >= Z) return null;
-
-    // Allocate composite
-    const comp = new Float32Array(Y * X * 3);
-    
-    for (let c = 0; c < C; c++) {
-      const settings = channelSettings[c];
-      if (!settings?.enabled || !settings?.visible) continue;
-      
-      const plane = result.zarr.data[c][zIndex];
-      const stats = result.stats[c];
-      
-      // Apply contrast limits based on percentiles
-      const [minPercent, maxPercent] = settings.contrast;
-      const dataRange = stats.p99 - stats.p1;
-      const contrastMin = stats.p1 + (dataRange * minPercent / 100);
-      const contrastMax = stats.p1 + (dataRange * maxPercent / 100);
-      const contrastRange = contrastMax - contrastMin;
-      
-      const lut = DEFAULT_LUTS[settings.lut % DEFAULT_LUTS.length].color.map(v => v / 255);
-      
-      for (let y = 0; y < Y; y++) {
-        const row = plane[y];
-        for (let x = 0; x < X; x++) {
-          const rawValue = row[x];
-          // Apply contrast
-          const normalizedValue = contrastRange > 0 ? 
-            Math.max(0, Math.min(1, (rawValue - contrastMin) / contrastRange)) : 0;
-          
-          const idx = (y * X + x) * 3;
-          comp[idx] += normalizedValue * lut[0];
-          comp[idx + 1] += normalizedValue * lut[1];
-          comp[idx + 2] += normalizedValue * lut[2];
-        }
-      }
-    }
-    
-    // Clamp and convert to image
-    for (let i = 0; i < comp.length; i++) comp[i] = Math.min(1, comp[i]);
-    const u8 = new Uint8ClampedArray(comp.length);
-    for (let i = 0; i < comp.length; i++) u8[i] = Math.round(comp[i] * 255);
-    
-    // Create canvas with scaling
-    const canvas = document.createElement('canvas');
-    const scaledWidth = X * imageScale;
-    const scaledHeight = Y * imageScale;
-    canvas.width = scaledWidth;
-    canvas.height = scaledHeight;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    
-    // Disable image smoothing for pixelated look
-    ctx.imageSmoothingEnabled = false;
-    
-    // Create image data at original size
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = X;
-    tempCanvas.height = Y;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return null;
-    
-    const imageData = tempCtx.createImageData(X, Y);
-    for (let p = 0, q = 0; p < u8.length; p += 3, q += 4) {
-      imageData.data[q] = u8[p];
-      imageData.data[q + 1] = u8[p + 1];
-      imageData.data[q + 2] = u8[p + 2];
-      imageData.data[q + 3] = 255;
-    }
-    
-    tempCtx.putImageData(imageData, 0, 0);
-    
-    // Scale up using nearest neighbor
-    ctx.drawImage(tempCanvas, 0, 0, X, Y, 0, 0, scaledWidth, scaledHeight);
-    
-    return canvas.toDataURL('image/png');
-  }, [result, zIndex, channelSettings, imageScale]);
 
   const renderChannelControls = () => {
     if (!result) return null;
@@ -547,50 +475,24 @@ function App() {
           {result ? (
             <>
               <div className="viewer-controls">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  <label style={{ flex: 1 }}>
-                    Z-Slice: {zIndex} / {result.shape[1] - 1}
-                    <input
-                      type="range"
-                      min={0}
-                      max={result.shape[1] - 1}
-                      value={zIndex}
-                      onChange={e => setZIndex(parseInt(e.target.value))}
-                      style={{ width: '100%', marginTop: '0.25rem' }}
-                    />
-                  </label>
-                  
-                  <label>
-                    Scale
-                    <select
-                      value={imageScale}
-                      onChange={e => setImageScale(parseInt(e.target.value))}
-                    >
-                      <option value={1}>1x</option>
-                      <option value={2}>2x</option>
-                      <option value={4}>4x</option>
-                      <option value={8}>8x</option>
-                      <option value={16}>16x</option>
-                    </select>
-                  </label>
-                </div>
+                {renderChannelControls()}
               </div>
               
-              {renderChannelControls()}
-              
               <div className="image-display">
-                {compositeUrl ? (
-                  <img src={compositeUrl} alt={`Z-slice ${zIndex}`} />
-                ) : (
-                  <p style={{ color: '#6b7280' }}>No image data available</p>
-                )}
+                <SimulationVivViewer
+                  result={result}
+                  channelSettings={channelSettings}
+                  defaultLuts={DEFAULT_LUTS}
+                  width={800}
+                  height={600}
+                />
               </div>
               
               <div className="status-info">
                 Shape: {JSON.stringify(result.shape)} ({result.dims.join(', ')})<br/>
                 Simulation time: {result.elapsed_s.toFixed(3)}s<br/>
-                Display: Z={zIndex}, Scale={imageScale}x, Size={result.shape[3] * imageScale}×{result.shape[2] * imageScale}px<br/>
-                Channels: {result.shape[0]}, Preview from Z-slice {result.z_slice_used}
+                Channels: {result.shape[0]}, Size: {result.shape[3]}×{result.shape[2]}px<br/>
+                Use mouse controls and scroll wheel to navigate the 3D volume
               </div>
             </>
           ) : (
