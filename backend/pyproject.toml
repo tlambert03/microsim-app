@@ -1,0 +1,12 @@
+[project]
+name = "microsim-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.116.1",
+    "microsim>=0.0.11",
+    "pillow>=11.3.0",
+    "pydantic>=2.11.7",
+]
