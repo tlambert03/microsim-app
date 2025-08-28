@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "dev": "concurrently \"uv run --project backend uvicorn main:app --reload --app-dir backend\" \"npm run dev --workspace frontend\" ",
+    "test": "uv run --project backend pytest"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}

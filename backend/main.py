@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import base64
 import io
 import time
 from typing import Any
-import base64
 
 import numpy as np
 import xarray as xr
@@ -51,7 +51,9 @@ def simulate(req: SimulationRequest):
     try:
         sim = ms.Simulation.model_validate(req.simulation)
     except Exception as exc:  # broad for user feedback; refine later
-        raise HTTPException(status_code=400, detail=f"Invalid simulation parameters: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"Invalid simulation parameters: {str(exc)}"
+        ) from exc
 
     try:
         data = sim.run()  # (C, Z, Y, X)
@@ -84,40 +86,50 @@ def simulate(req: SimulationRequest):
             channel_data = a[c].flatten()
             channel_data = channel_data[np.isfinite(channel_data)]  # Remove inf/nan
             if len(channel_data) > 0:
-                stats.append({
-                    "min": float(np.min(channel_data)),
-                    "max": float(np.max(channel_data)),
-                    "mean": float(np.mean(channel_data)),
-                    "std": float(np.std(channel_data)),
-                    "p1": float(np.percentile(channel_data, 1)),
-                    "p5": float(np.percentile(channel_data, 5)),
-                    "p95": float(np.percentile(channel_data, 95)),
-                    "p99": float(np.percentile(channel_data, 99)),
-                })
+                stats.append(
+                    {
+                        "min": float(np.min(channel_data)),
+                        "max": float(np.max(channel_data)),
+                        "mean": float(np.mean(channel_data)),
+                        "std": float(np.std(channel_data)),
+                        "p1": float(np.percentile(channel_data, 1)),
+                        "p5": float(np.percentile(channel_data, 5)),
+                        "p95": float(np.percentile(channel_data, 95)),
+                        "p99": float(np.percentile(channel_data, 99)),
+                    }
+                )
             else:
-                stats.append({
-                    "min": 0.0, "max": 1.0, "mean": 0.0, "std": 0.0,
-                    "p1": 0.0, "p5": 0.0, "p95": 1.0, "p99": 1.0
-                })
+                stats.append(
+                    {
+                        "min": 0.0,
+                        "max": 1.0,
+                        "mean": 0.0,
+                        "std": 0.0,
+                        "p1": 0.0,
+                        "p5": 0.0,
+                        "p95": 1.0,
+                        "p99": 1.0,
+                    }
+                )
 
         # Create an enhanced preview PNG (mid Z slice with better coloring)
         z_mid = a.shape[1] // 2
         z_slice = a[:, z_mid, :, :]  # Shape: (C, Y, X)
-        
+
         # Enhanced color mapping
         colors = [
             (1.0, 0.2, 0.2),  # Red
-            (0.2, 1.0, 0.2),  # Green  
+            (0.2, 1.0, 0.2),  # Green
             (0.2, 0.2, 1.0),  # Blue
             (1.0, 0.2, 1.0),  # Magenta
             (1.0, 1.0, 0.2),  # Yellow
             (0.2, 1.0, 1.0),  # Cyan
             (1.0, 1.0, 1.0),  # White
         ]
-        
+
         # Create composite image
         composite = np.zeros((z_slice.shape[1], z_slice.shape[2], 3), dtype=np.float32)
-        
+
         for ci in range(min(z_slice.shape[0], len(colors))):
             ch = z_slice[ci].astype(np.float32)
             if np.max(ch) > 0:
@@ -129,35 +141,39 @@ def simulate(req: SimulationRequest):
                     ch_norm = ch / np.max(ch) if np.max(ch) > 0 else ch
             else:
                 ch_norm = ch
-            
+
             color = np.array(colors[ci])
             composite += ch_norm[..., None] * color
-        
+
         # Clip and convert to image
         composite = np.clip(composite, 0, 1)
         img_array = (composite * 255).astype(np.uint8)
         img = Image.fromarray(img_array)
-        
+
         # Save to base64
         bio = io.BytesIO()
         img.save(bio, format="PNG")
-        preview_png_b64 = base64.b64encode(bio.getvalue()).decode('utf-8')
+        preview_png_b64 = base64.b64encode(bio.getvalue()).decode("utf-8")
 
         elapsed = time.perf_counter() - t0
-        
-        return JSONResponse({
-            "shape": list(a.shape),
-            "dims": ["C", "Z", "Y", "X"],
-            "dtype": str(a.dtype),
-            "zarr": zarr_struct,
-            "preview_png_b64": preview_png_b64,
-            "stats": stats,
-            "elapsed_s": elapsed,
-            "z_slice_used": int(z_mid),
-        })
+
+        return JSONResponse(
+            {
+                "shape": list(a.shape),
+                "dims": ["C", "Z", "Y", "X"],
+                "dtype": str(a.dtype),
+                "zarr": zarr_struct,
+                "preview_png_b64": preview_png_b64,
+                "stats": stats,
+                "elapsed_s": elapsed,
+                "z_slice_used": int(z_mid),
+            }
+        )
 
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Simulation failed: {str(exc)}"
+        ) from exc
 
 
 @app.get("/health")
@@ -168,8 +184,8 @@ def health():
 @app.get("/")
 def root():
     return {
-        "message": "Microsim Simulation API", 
+        "message": "Microsim Simulation API",
         "version": "0.1.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
